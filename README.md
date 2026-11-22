@@ -47,6 +47,10 @@ The two official profiles use `https://facilitator.pieverse.io/v2` through the x
 
 To configure an official merchant, set `PAY_TO` to the recipient EVM address and `PUBLIC_ORIGIN` to the service's public HTTPS origin. Choose the payment mode explicitly. The `.env.example` file lists the variables. To load a local `.env` file, run `node --env-file=.env server/main.js`. The server still binds to loopback by default. For an existing registry, configure both `REGISTRY_RPC_URL` and `REGISTRY_ADDRESS`; otherwise the service starts local Anvil. The registry chain and payment network are independent.
 
+### Kite Testnet wallet quote protocol
+
+A wallet client requests `GET /api/report` with `X-Console-Wallet` (payer address) and `X-Console-Run` (32 random bytes in lowercase hex). The 402 includes the standard `PAYMENT-REQUIRED` header and `X-Console-Quote` with the EIP-3009 nonce and its Unix expiration in seconds, separated by a colon. The signed authorization uses that nonce and the same expiration as `validBefore`. Send the resulting v2 `PAYMENT-SIGNATURE` with both request headers. The service checks the quote's wallet, ID, resource, configuration version and payment terms before facilitator verification. Each quote allows one attempt and expires after 60 seconds. Standard external x402 clients can continue to use the endpoint without the wallet headers.
+
 ### Passport buyer flow
 
 A live check requires a reachable HTTPS origin, a configured merchant address, an authenticated Passport agent and an active spending session whose policy allows this merchant, network and amount. A real payment on the Base profile uses USDC on mainnet.

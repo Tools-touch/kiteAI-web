@@ -1,13 +1,14 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { isAddress, zeroAddress } from 'viem';
+import { KITE_WALLET, QUOTE_SECONDS } from '../shared/kite-wallet.js';
 
 export const OFFICIAL_FACILITATOR = 'https://facilitator.pieverse.io/v2';
 
 const profiles = {
   local: { network: 'eip155:31337', symbol: 'demoUSD', asset: '0x0000000000000000000000000000000000000001', decimals: 6, name: 'Local demo USD', version: '1' },
   passport: { network: 'eip155:8453', symbol: 'USDC', asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, name: 'USD Coin', version: '2', explorer: 'https://basescan.org/tx/' },
-  'kite-testnet': { network: 'eip155:2368', symbol: 'pieUSD', asset: '0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A', decimals: 18, name: 'pieUSD', version: '1', explorer: 'https://testnet.kitescan.ai/tx/' }
+  'kite-testnet': KITE_WALLET
 };
 
 export function paymentConfig(mode, env) {
@@ -18,7 +19,7 @@ export function paymentConfig(mode, env) {
   const { network, asset, symbol, explorer, decimals, name, version } = profile;
   const amount = (10n ** BigInt(decimals - 2)).toString();
   const extra = { name, version };
-  const requirements = { scheme: 'exact', network, amount, asset, payTo, extra, maxTimeoutSeconds: 60 };
+  const requirements = { scheme: 'exact', network, amount, asset, payTo, extra, maxTimeoutSeconds: QUOTE_SECONDS };
   return {
     requirements,
     price: { amount, asset, extra },

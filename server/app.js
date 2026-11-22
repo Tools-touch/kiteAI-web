@@ -6,6 +6,7 @@ import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { localFacilitator } from './payments.js';
 import { REPORT_PATH } from './registry.js';
+import { walletQuotes } from './wallet-quotes.js';
 
 const font = fileURLToPath(new URL('../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2', import.meta.url));
 const views = fileURLToPath(new URL('./views', import.meta.url));
@@ -24,12 +25,14 @@ function createReport(service) {
   };
 }
 
-export function createApp({ registry, payment, publicOrigin, facilitator, report = createReport }) {
+export function createApp({ registry, payment, publicOrigin, facilitator, report = createReport, now }) {
   const app = express();
   app.disable('x-powered-by');
   app.enable('case sensitive routing');
   app.enable('strict routing');
   const { info, price, requirements } = payment;
+  const resource = publicOrigin && publicOrigin + REPORT_PATH;
+  const quotes = walletQuotes({ payment: info, resource, now });
   const local = info.mode === 'local' ? localFacilitator(requirements) : undefined;
   const paymentServer = new x402ResourceServer(facilitator ?? local ?? payment.facilitator)
     .register(info.network, new ExactEvmScheme());
@@ -47,7 +50,7 @@ export function createApp({ registry, payment, publicOrigin, facilitator, report
         scheme: requirements.scheme, network: info.network, payTo: requirements.payTo,
         price, maxTimeoutSeconds: requirements.maxTimeoutSeconds
       },
-      ...(publicOrigin && { resource: publicOrigin + REPORT_PATH }),
+      ...(resource && { resource }),
       description: 'Service status and registry report',
       mimeType: 'application/json'
     }
@@ -111,18 +114,24 @@ export function createApp({ registry, payment, publicOrigin, facilitator, report
     const service = await readRegistry(res);
     if (!service) return;
     if (!available(service)) return res.status(503).json({ error: 'Service is disabled or misconfigured' });
-    let signature = req.get('Payment-Signature') || req.get('X-Payment');
+    const signature = req.get('Payment-Signature') || req.get('X-Payment');
+    let payload;
     if (signature) {
       try {
-        decodePaymentSignatureHeader(signature);
+        payload = decodePaymentSignatureHeader(signature);
       } catch {
         delete req.headers['payment-signature'];
         delete req.headers['x-payment'];
-        signature = undefined;
       }
     }
     const key = req.get('X-Console-Run');
-    if (!local && runKey(key) && signature) {
+    const quote = quotes.check({
+      key: runKey(key) ? key : undefined, wallet: req.get('X-Console-Wallet'),
+      payload, version: service.version, hasQuery: req.originalUrl.includes('?')
+    });
+    if (quote.error) return res.status(quote.status).json({ error: quote.error });
+    if (quote.header) res.set('X-Console-Quote', quote.header);
+    if (!local && runKey(key) && payload) {
       cleanRuns();
       const now = Date.now();
       for (const [id, expiry] of pending) {
@@ -139,6 +148,7 @@ export function createApp({ registry, payment, publicOrigin, facilitator, report
         if (pending.get(key) === expiry) pending.delete(key);
       });
     }
+    quote.consume?.();
     res.locals.registryVersion = service.version;
     next();
   }, paymentGate, async (_req, res) => {

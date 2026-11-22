@@ -7,6 +7,8 @@ import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { localFacilitator } from './payments.js';
 import { REPORT_PATH } from './registry.js';
 import { walletQuotes } from './wallet-quotes.js';
+import { walletBrowserAsset } from './wallet-asset.js';
+import { KITE_WALLET } from '../shared/kite-wallet.js';
 
 const font = fileURLToPath(new URL('../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2', import.meta.url));
 const views = fileURLToPath(new URL('./views', import.meta.url));
@@ -186,6 +188,11 @@ export function createApp({ registry, payment, publicOrigin, facilitator, report
   });
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found' }));
+  if (info.mode === KITE_WALLET.mode) {
+    app.get('/assets/wallet.js', async (_req, res) => {
+      res.type('text/javascript').send(await walletBrowserAsset());
+    });
+  }
   app.get('/assets/bricolage.woff2', (_req, res) => res.sendFile(font));
   app.get(['/services', '/passport', '/requests', '/registry'], (_req, res) => {
     res.sendFile('pages.html', { root: views });

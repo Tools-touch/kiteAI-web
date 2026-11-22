@@ -41,15 +41,23 @@ Expect HTTP 402, HTTP 200 with `PAYMENT-RESPONSE`, then HTTP 402 for replay. The
 | --- | --- | --- | --- |
 | `local` (default) | Simulated `eip155:31337` | 0.01 demoUSD | Browser demo |
 | `passport` | Base mainnet `eip155:8453` | 0.01 USDC | Approved Kite Agent Passport agent session compatible with Base x402 v2 exact |
-| `kite-testnet` | KiteAI Testnet `eip155:2368` | 0.01 pieUSD | x402 v2 exact client with a Kite testnet EIP-3009 payer |
+| `kite-testnet` | KiteAI Testnet `eip155:2368` | 0.01 pieUSD | Injected EVM browser wallet or an external x402 v2 exact client with an EIP-3009 payer |
 
 The two official profiles use `https://facilitator.pieverse.io/v2` through the x402 SDK. The SDK negotiates `PAYMENT-REQUIRED`, calls `/verify` on a validly shaped payment, and calls `/settle` after a successful report. Only then does it send the report with `PAYMENT-RESPONSE`. The quote carries integer atomic amounts, the recipient, network, scheme and asset. An unavailable registry, disabled service or failed report prevents settlement for that request.
 
 To configure an official merchant, set `PAY_TO` to the recipient EVM address and `PUBLIC_ORIGIN` to the service's public HTTPS origin. Choose the payment mode explicitly. The `.env.example` file lists the variables. To load a local `.env` file, run `node --env-file=.env server/main.js`. The server still binds to loopback by default. For an existing registry, configure both `REGISTRY_RPC_URL` and `REGISTRY_ADDRESS`; otherwise the service starts local Anvil. The registry chain and payment network are independent.
 
+### Kite Testnet browser wallet
+
+With `PAYMENT_MODE=kite-testnet`, open the service detail over HTTPS (localhost also works for development). Choose **Browser wallet**, then **Connect wallet**. Use an injected EIP-1193 EVM wallet with an account that supports `eth_signTypedData_v4` and holds testnet pieUSD. Switch to KiteAI Testnet (chain 2368) in the wallet, or use **Switch to KiteAI Testnet** if the wallet already knows the network. See the [official network configuration](https://docs.gokite.ai/kite-chain/1-getting-started/network-information).
+
+Choose **Request payment terms** and check the network, token, recipient, amount and expiry. **Confirm & sign** opens a wallet prompt for one EIP-3009 `TransferWithAuthorization`. Connection, switching networks and requesting the quote each run without a payment signature. The browser submits the signed authorization once, and the facilitator relays the transfer. A wallet account or chain change before submission invalidates the quote. Rejected signatures can be retried while the quote remains valid. After a submitted payment with an uncertain result, use **Check for receipt** before authorizing another transfer. The console stores the request ID for receipt recovery after a reload.
+
+The **External x402 client** option also remains available in this profile. The **Passport** page describes the independent Base USDC agent flow. **Local simulation** requires no wallet.
+
 ### Kite Testnet wallet quote protocol
 
-A wallet client requests `GET /api/report` with `X-Console-Wallet` (payer address) and `X-Console-Run` (32 random bytes in lowercase hex). The 402 includes the standard `PAYMENT-REQUIRED` header and `X-Console-Quote` with the EIP-3009 nonce and its Unix expiration in seconds, separated by a colon. The signed authorization uses that nonce and the same expiration as `validBefore`. Send the resulting v2 `PAYMENT-SIGNATURE` with both request headers. The service checks the quote's wallet, ID, resource, configuration version and payment terms before facilitator verification. Each quote allows one attempt and expires after 60 seconds. Standard external x402 clients can continue to use the endpoint without the wallet headers.
+A wallet client requests `GET /api/report` with `X-Console-Wallet` (payer address) and `X-Console-Run` (32 random bytes in lowercase hex). The 402 includes the standard `PAYMENT-REQUIRED` header and `X-Console-Quote` with the EIP-3009 nonce and its Unix expiration in seconds, separated by a colon. The signed authorization uses that nonce and the same expiration as `validBefore`. Send the resulting v2 `PAYMENT-SIGNATURE` with both request headers. The service checks the quote's wallet, ID, resource, configuration version and payment terms before facilitator verification. Each quote allows one attempt and expires after 60 seconds. Quotes and receipts are kept in server memory, so quote, submission and receipt lookup use the same running instance. Standard external x402 clients can continue to use the endpoint without the wallet headers.
 
 ### Passport buyer flow
 
@@ -75,7 +83,7 @@ The report service ID is `keccak256("kite.service.status-report")`. The backend 
 npm test
 ```
 
-The suite covers real local contract deployment, independent IDs, owner-only mutation, input validation, versioning, route guards, missing or invalid payment, concurrent replay, backend and RPC failures, registry changes, settlement failures and the verified receipt and digest. Official-mode failure and success tests run against a local HTTP facilitator fixture and use no funds.
+The suite also exercises the browser SDK with an injected-wallet fixture. It checks connection and network switching, validates the signed EIP-712 domain and authorization, verifies account changes and expiry during signing, and exercises a single settled result with replay rejection. The suite covers real local contract deployment, independent IDs, owner-only mutation, input validation, versioning, route guards, missing or invalid payment, concurrent replay, backend and RPC failures, registry changes, settlement failures and the verified receipt and digest. Official-mode failure and success tests run against a local HTTP facilitator fixture and use no funds.
 
 The [selected GPT Image mockup](docs/console-design.png) informed the overview and request detail. The remaining pages use the same grid, typography, status indicators and color palette.
 

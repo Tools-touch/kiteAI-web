@@ -1,3 +1,4 @@
+import { walletPanel } from './wallet-panel.js';
 import { getService, mountShell, paymentNetworks, readHistory, readJson as json, saveRecord } from './shell.js';
 
 mountShell();
@@ -11,6 +12,32 @@ let phase = 'request';
 let busy = false;
 
 let runId;
+let activeQuote;
+let quoteTimer;
+let walletPayer;
+const method = byId('payment-method');
+const confirm = byId('wallet-confirm');
+const checkResult = byId('check-result');
+const reportPath = '/api/report';
+const wallet = walletPanel(walletChanged, message => showNotice(message, Boolean(message)));
+
+function walletSelected() {
+  return service?.payment.mode === 'kite-testnet' && method.value === 'wallet';
+}
+
+function invalidateQuote() {
+  clearTimeout(quoteTimer);
+  activeQuote = undefined;
+}
+
+function walletChanged(invalidate = true) {
+  if (invalidate && (activeQuote || phase === 'wallet-quote')) {
+    invalidateQuote();
+    phase = 'request';
+    showNotice('Wallet account or network changed. Request a new quote.', true);
+  }
+  updateAction();
+}
 
 function record(status, data) {
   if (runId && !saveRecord({ id: runId, date: new Date().toISOString(), mode: service.payment.mode, status, data })) {
@@ -20,6 +47,8 @@ function record(status, data) {
 
 function showNotice(message, error = false) {
   const notice = byId('notice');
+  const slot = byId(!byId('terms-panel').hidden && walletSelected() ? 'wallet-notice' : 'progress-notice');
+  if (notice.parentElement !== slot) slot.append(notice);
   notice.textContent = message;
   notice.hidden = !message;
   notice.classList.toggle('error', error);
@@ -39,9 +68,16 @@ function updateAction() {
     request: 'Request payment terms',
     pay: 'Simulate payment',
     external: 'Request terms again',
+    'wallet-quote': 'Request new quote',
+    'wallet-pending': 'Start another request',
     complete: 'Start another request'
   };
-  action.disabled = busy || (phase !== 'load' && !service?.available);
+  action.disabled = busy || (phase !== 'load' && !service?.available) ||
+    (walletSelected() && phase !== 'wallet-pending' && phase !== 'complete' && !wallet.ready());
+  method.disabled = busy;
+  wallet.lock(busy);
+  confirm.disabled = busy || phase !== 'wallet-quote' || !activeQuote || !wallet.ready();
+  checkResult.disabled = busy || (phase !== 'external' && phase !== 'wallet-pending');
   action.textContent = busy ? 'Working…' : labels[phase];
 }
 
@@ -68,61 +104,156 @@ async function loadService() {
     passport: 'Requires a funded Kite Agent Passport session with approval for Base USDC.',
     'kite-testnet': 'Requires a Kite testnet x402 payer and pieUSD.'
   }[mode]);
+  updatePaymentMethod();
   phase = 'request';
   if (!available) {
     showNotice('The contract registration is disabled, missing, or configured for a different path.', true);
   }
 }
 
-async function requestTerms() {
+function updatePaymentMethod() {
+  const mode = service.payment.mode;
+  byId('payment-picker').hidden = mode !== 'kite-testnet';
+  byId('wallet-panel').hidden = !walletSelected();
+  byId('payment-method-label').hidden = mode === 'kite-testnet';
+  text('payment-method-label', mode === 'passport' ? 'Payment method · Kite Agent Passport' : 'Payment method · Local simulation');
+}
+
+function resetRequest() {
+  invalidateQuote();
+  walletPayer = undefined;
   phase = 'request';
-  runId = Array.from(crypto.getRandomValues(new Uint8Array(32)),
-    byte => byte.toString(16).padStart(2, '0')).join('');
+  runId = undefined;
   setStep(0);
+  text('step-request', 'Fetch the x402 endpoint');
   for (const id of ['step-terms', 'step-payment', 'step-result']) text(id, '');
   byId('terms-panel').hidden = true;
   byId('result-panel').hidden = true;
-  const response = await fetch('/api/report', { signal: AbortSignal.timeout(30_000) });
+}
+
+const headersForWallet = () => ({ 'X-Console-Wallet': walletPayer, 'X-Console-Run': runId });
+
+async function requestTerms() {
+  resetRequest();
+  runId = Array.from(crypto.getRandomValues(new Uint8Array(32)),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+  const useWallet = walletSelected();
+  walletPayer = useWallet ? wallet.address() : undefined;
+  const response = await fetch(reportPath, {
+    headers: useWallet ? headersForWallet() : undefined,
+    signal: AbortSignal.timeout(30_000)
+  });
   if (response.status !== 402) {
     await json(response);
     throw new Error('Expected HTTP 402 payment terms');
   }
-  const { accepts, x402Version } = decodeHeader(response.headers.get('payment-required'));
-  const terms = accepts?.[0];
-  if (x402Version !== 2 || !terms || terms.network !== service.payment.network ||
+  const challenge = decodeHeader(response.headers.get('payment-required'));
+  const terms = challenge.accepts?.[0];
+  if (challenge.x402Version !== 2 || !terms || terms.network !== service.payment.network ||
       terms.amount !== service.payment.amount || terms.scheme !== 'exact' ||
       terms.asset !== service.payment.asset || terms.payTo !== service.payment.payTo) {
     throw new Error('The received payment terms differ from the advertised service.');
   }
+  if (useWallet) {
+    if (!wallet.ready() || wallet.address() !== walletPayer) throw new Error('Wallet changed during the quote.');
+    const quote = wallet.makeQuote({ challenge, header: response.headers.get('X-Console-Quote'), service, path: reportPath });
+    activeQuote = quote;
+    quoteTimer = setTimeout(() => {
+      if (activeQuote !== quote) return;
+      invalidateQuote();
+      phase = 'request';
+      showNotice('Wallet quote expired or is too close to expiry. Request a new quote.', true);
+      updateAction();
+    }, Math.max(0, quote.expiresAt * 1000 - Date.now() - 8000));
+  }
   showTerms(terms);
-  record('HTTP 402', terms);
+  record('HTTP 402', useWallet ? { method: 'Browser wallet', terms } : terms);
+  if (useWallet) byId('terms-title').focus();
 }
 
 function showTerms(terms) {
   const { mode } = service.payment;
-  phase = mode === 'local' ? 'pay' : 'external';
+  const isWallet = Boolean(activeQuote);
+  phase = isWallet ? 'wallet-quote' : mode === 'local' ? 'pay' : 'external';
   text('terms-scheme', 'x402 v2 · ' + terms.scheme + ' · ' + terms.network);
   text('terms-asset', service.payment.displayPrice + ' · ' + terms.asset);
   text('terms-recipient', terms.payTo);
   text('terms-timeout', terms.maxTimeoutSeconds + ' seconds');
   byId('terms-panel').hidden = false;
-  byId('cli-panel').hidden = mode === 'local';
-  byId('check-result').disabled = false;
+  byId('terms-expiration').hidden = !isWallet;
+  byId('terms-wallet-row').hidden = !walletPayer;
+  text('terms-wallet', walletPayer || '—');
+  byId('wallet-confirm-panel').hidden = !isWallet;
+  byId('receipt-tools').hidden = phase !== 'external';
+  byId('cli-panel').hidden = phase !== 'external';
+  if (isWallet) {
+    text('terms-deadline', new Date(activeQuote.expiresAt * 1000).toLocaleTimeString());
+    text('wallet-confirm', 'Confirm & sign ' + service.payment.displayPrice);
+  }
   text('copy-command', mode === 'passport' ? 'Copy command' : 'Copy request details');
-  if (mode === 'passport') {
+  if (phase === 'external' && mode === 'passport') {
     text('cli-guide', 'Run with your approved Passport session. This command can spend real USDC.');
     text('cli-command', "kpass session execute --url '" + service.endpoint +
       "' --method GET --headers '" + JSON.stringify({ 'X-Console-Run': runId }) + "' --output json");
-  } else if (mode === 'kite-testnet') {
+  } else if (phase === 'external') {
     text('cli-guide', 'Use a Kite testnet-compatible x402 v2 client with a pieUSD EIP-3009 signer.');
     text('cli-command', service.endpoint + '\nX-Console-Run: ' + runId);
   }
   text('step-request', 'HTTP 402 received');
   text('step-terms', service.payment.displayPrice + ' · x402 v2');
   setStep(1);
-  if (mode !== 'local') {
+  if (phase === 'external') {
     text('step-payment', 'Waiting for an external payer');
     showNotice('Run the external request, then check for its receipt.');
+  }
+}
+
+function showWalletPending() {
+  phase = 'wallet-pending';
+  byId('terms-panel').hidden = false;
+  byId('wallet-confirm-panel').hidden = true;
+  byId('receipt-tools').hidden = false;
+  byId('cli-panel').hidden = true;
+  text('step-request', 'HTTP 402 received');
+  text('step-terms', service.payment.displayPrice + ' · x402 v2');
+  setStep(2);
+  text('step-payment', 'Waiting for settlement');
+}
+
+async function payWithWallet() {
+  if (busy || phase !== 'wallet-quote' || !activeQuote || !wallet.ready()) return;
+  busy = true;
+  updateAction();
+  showNotice('Approve the testnet payment in your wallet.');
+  const quote = activeQuote;
+  const current = () => activeQuote === quote && phase === 'wallet-quote';
+  try {
+    const signature = await wallet.sign(quote, current);
+    if (!current()) throw new Error('Wallet or request changed. Request a new quote.');
+    invalidateQuote();
+    showWalletPending();
+    record('Payment submitted', { method: 'Browser wallet', payer: walletPayer, terms: quote.terms });
+    const response = await fetch(reportPath, {
+      headers: { ...headersForWallet(), 'Payment-Signature': signature },
+      signal: AbortSignal.timeout(55_000)
+    });
+    if (response.status === 402) throw new Error('The facilitator did not return a successful settlement.');
+    const payload = await json(response);
+    await displayResult(payload, decodeHeader(response.headers.get('payment-response')));
+    showNotice('');
+  } catch (error) {
+    if (phase === 'wallet-pending') {
+      showNotice(error.message + ' Check for a receipt before making another payment.', true);
+    } else if (error.code === 4001 && current()) {
+      showNotice('Payment signature declined. Your wallet has sent no payment.', true);
+    } else {
+      invalidateQuote();
+      phase = 'request';
+      showNotice(error.message, true);
+    }
+  } finally {
+    busy = false;
+    updateAction();
   }
 }
 
@@ -149,6 +280,12 @@ async function displayResult(payload, receipt) {
       receipt.network !== service.payment.network || !transactionPattern.test(receipt.transaction)) {
     throw new Error('The settlement receipt is invalid for this payment mode.');
   }
+  if (walletPayer && receipt.payer && walletPayer.toLowerCase() !== String(receipt.payer).toLowerCase()) {
+    throw new Error('The receipt payer differs from the wallet that signed.');
+  }
+  const payer = receipt.payer || walletPayer;
+  byId('payer-row').hidden = !payer;
+  text('receipt-payer', payer || '—');
   const bytes = new TextEncoder().encode(JSON.stringify(report));
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
     byte => byte.toString(16).padStart(2, '0')).join('');
@@ -165,9 +302,10 @@ async function displayResult(payload, receipt) {
   text('digest', digest);
   text('blob', JSON.stringify(report, null, 2));
   byId('result-panel').hidden = false;
+  byId('receipt-tools').hidden = true;
   setStep(4);
   phase = 'complete';
-  record('HTTP 200', { report, sha256, receipt });
+  record('HTTP 200', { report, sha256, receipt, ...(walletPayer && { method: 'Browser wallet' }) });
 }
 
 async function run() {
@@ -179,21 +317,27 @@ async function run() {
     if (!service || phase === 'complete') {
       const initial = !service;
       await loadService();
-      if (initial && service.available && service.payment.mode !== 'local') {
-        const pending = readHistory().find(entry => entry.mode === service.payment.mode && entry.status === 'HTTP 402' &&
+      if (initial && service.payment.mode !== 'local') {
+        const pending = readHistory().find(entry => entry.mode === service.payment.mode &&
+          (entry.status === 'Payment submitted' || (entry.status === 'HTTP 402' && entry.data?.scheme)) &&
           /^[a-f0-9]{64}$/.test(entry.id) && Date.now() - new Date(entry.date).getTime() < 900_000);
         if (pending) {
           runId = pending.id;
-          showTerms(pending.data);
+          if (pending.status === 'Payment submitted') {
+            walletPayer = pending.data.payer;
+            showTerms(pending.data.terms);
+            showWalletPending();
+            showNotice('Check for the receipt of the payment submitted from this browser.');
+          } else {
+            if (service.payment.mode === 'kite-testnet') {
+              method.value = 'external';
+              updatePaymentMethod();
+            }
+            showTerms(pending.data);
+          }
         }
       }
-      if (byId('result-panel').hidden === false) {
-        byId('terms-panel').hidden = true;
-        byId('result-panel').hidden = true;
-        setStep(0);
-        text('step-request', 'Fetch the x402 endpoint');
-        for (const id of ['step-terms', 'step-payment', 'step-result']) text(id, '');
-      }
+      if (!initial) resetRequest();
     } else if (phase === 'pay') await simulate();
     else await requestTerms();
   } catch (error) {
@@ -222,11 +366,10 @@ byId('copy-command').addEventListener('click', async () => {
   }
 });
 
-byId('check-result').addEventListener('click', async () => {
-  if (busy || phase !== 'external') return;
+checkResult.addEventListener('click', async () => {
+  if (busy || (phase !== 'external' && phase !== 'wallet-pending')) return;
   busy = true;
   updateAction();
-  byId('check-result').disabled = true;
   try {
     const response = await fetch('/api/runs/' + runId, { signal: AbortSignal.timeout(10_000) });
     if (response.status === 404) {
@@ -241,8 +384,14 @@ byId('check-result').addEventListener('click', async () => {
   } finally {
     busy = false;
     updateAction();
-    byId('check-result').disabled = phase !== 'external';
   }
 });
+method.addEventListener('change', () => {
+  resetRequest();
+  showNotice('');
+  updatePaymentMethod();
+  updateAction();
+});
+confirm.addEventListener('click', payWithWallet);
 action.addEventListener('click', run);
 await run();

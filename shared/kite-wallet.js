@@ -15,10 +15,12 @@ export const KITE_WALLET = Object.freeze({
 export const WALLET_NONCE_PREFIX = '6b69746577616c31';
 export const QUOTE_SECONDS = 60;
 
+export function isWalletAddress(value) {
+  return typeof value === 'string' && /^0x[0-9a-f]{40}$/i.test(value) && !/^0x0{40}$/i.test(value);
+}
+
 export function sameAddress(a, b) {
-  return typeof a === 'string' && typeof b === 'string' &&
-    /^0x[0-9a-f]{40}$/i.test(a) && /^0x[0-9a-f]{40}$/i.test(b) &&
-    a.toLowerCase() === b.toLowerCase();
+  return isWalletAddress(a) && isWalletAddress(b) && a.toLowerCase() === b.toLowerCase();
 }
 
 export function isWalletNonce(value) {

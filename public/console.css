@@ -130,3 +130,13 @@ h3{line-height:1.15}
 @media(max-width:900px){.nav{width:calc(100% - 48px)}}
 @media(max-width:680px){.nav{width:calc(100% - 32px);gap:15px}.nav a{font-size:.86rem}.summary{grid-template-columns:1fr}.catalog-card{grid-template-columns:minmax(0,1fr) auto}}
 .records{margin-top:12px}
+.payment-picker{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.payment-picker label{color:var(--muted);font: .875rem var(--mono)}
+.payment-picker select{max-width:60%;border:1px solid var(--line);border-radius:5px;padding:7px;color:var(--text);background:var(--raised);font:inherit}
+.payment-picker select:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+#wallet-panel{border:1px solid var(--rule);border-radius:6px;padding:10px 13px;margin-bottom:13px}
+.wallet-data > div{display:grid;grid-template-columns:minmax(115px,35%) minmax(0,1fr);gap:10px;padding:3px 0}
+#wallet-panel .toolbar{margin-top:8px}
+#wallet-confirm{margin-top:10px}
+#payment-method-label{margin:0 0 10px}
+#wallet-notice #notice{margin-top:12px}

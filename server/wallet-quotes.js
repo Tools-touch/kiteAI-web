@@ -1,7 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { KITE_WALLET, QUOTE_SECONDS, WALLET_NONCE_PREFIX, isWalletNonce, matchesWalletTerms, sameAddress } from '../shared/kite-wallet.js';
-
-const zeroAddress = '0x' + '0'.repeat(40);
+import { KITE_WALLET, QUOTE_SECONDS, WALLET_NONCE_PREFIX, isWalletAddress, isWalletNonce, matchesWalletTerms, sameAddress } from '../shared/kite-wallet.js';
 
 export function walletQuotes({ payment, resource, now = () => Math.floor(Date.now() / 1000) }) {
   const quotes = new Map();
@@ -13,7 +11,7 @@ export function walletQuotes({ payment, resource, now = () => Math.floor(Date.no
       if (wallet === undefined && !isWalletNonce(authorization?.nonce)) return {};
       if (payment.mode !== KITE_WALLET.mode) return error(400, 'Wallet payments require Kite Testnet');
       if (hasQuery) return error(400, 'Wallet quotes are for a report request without query parameters');
-      if (!key || !sameAddress(wallet, wallet) || sameAddress(wallet, zeroAddress)) {
+      if (!key || !isWalletAddress(wallet)) {
         return error(400, 'Wallet address and request ID are required');
       }
 

@@ -32,6 +32,24 @@
           <div><dt>Config version</dt><dd id="service-version">—</dd></div>
           <div><dt>Query parameters</dt><dd>None</dd></div>
         </dl>
+        <div id="payment-picker" class="payment-picker" hidden>
+          <label for="payment-method">Payment method</label>
+          <select id="payment-method">
+            <option value="wallet">Browser wallet</option>
+            <option value="external">External x402 client</option>
+          </select>
+        </div>
+        <p class="conditions" id="payment-method-label" hidden></p>
+        <div id="wallet-panel" class="wallet-panel" hidden>
+          <dl class="wallet-data">
+            <div><dt>Wallet address</dt><dd id="wallet-address">Disconnected</dd></div>
+            <div><dt>Wallet network</dt><dd id="wallet-network">—</dd></div>
+          </dl>
+          <div class="toolbar">
+            <button type="button" class="secondary" id="wallet-connect">Connect wallet</button>
+            <button type="button" class="secondary" id="wallet-switch" hidden>Switch to KiteAI Testnet</button>
+          </div>
+        </div>
         <button type="button" id="action" class="primary" disabled>Request payment terms</button>
         <p class="conditions" id="conditions">Reading service registration from the chain.</p>
       </section>
@@ -43,7 +61,7 @@
           <li><strong>Payment verification</strong><small id="step-payment"></small></li>
           <li><strong>Verified result</strong><small id="step-result"></small></li>
         </ol>
-        <p id="notice" role="status" aria-live="polite" hidden></p>
+        <div id="progress-notice"><p id="notice" role="status" aria-live="polite" hidden></p></div>
       </section>
     </div>
     <section class="panel detail-registry">
@@ -51,26 +69,36 @@
       <a class="secondary" href="/registry">View chain configuration</a>
     </section>
     <section class="panel result" id="terms-panel" aria-labelledby="terms-title" hidden>
-      <div class="panel-title"><h2 id="terms-title">Payment terms</h2><span class="badge cyan">HTTP 402</span></div>
+      <div class="panel-title"><h2 id="terms-title" tabindex="-1">Payment terms</h2><span class="badge cyan">HTTP 402</span></div>
       <dl class="rows">
         <div><dt>Scheme</dt><dd id="terms-scheme">—</dd></div>
         <div><dt>Asset</dt><dd id="terms-asset">—</dd></div>
         <div><dt>Recipient</dt><dd id="terms-recipient">—</dd></div>
+        <div id="terms-wallet-row" hidden><dt>Paying wallet</dt><dd id="terms-wallet">—</dd></div>
         <div><dt>Authorization window</dt><dd id="terms-timeout">—</dd></div>
+        <div id="terms-expiration" hidden><dt>Quote expires</dt><dd id="terms-deadline">—</dd></div>
       </dl>
       <div id="cli-panel" hidden>
         <p id="cli-guide"></p>
         <pre><code id="cli-command"></code></pre>
         <div class="toolbar">
           <button type="button" class="secondary" id="copy-command">Copy command</button>
-          <button type="button" class="secondary" id="check-result">Check for receipt</button>
         </div>
+      </div>
+      <div id="wallet-confirm-panel" hidden>
+        <p class="conditions">Your wallet will ask you to authorize this single transfer of testnet pieUSD.</p>
+        <button type="button" class="primary inline-primary wallet-confirm" id="wallet-confirm">Confirm &amp; sign</button>
+      </div>
+      <div id="wallet-notice"></div>
+      <div class="toolbar" id="receipt-tools" hidden>
+        <button type="button" class="secondary" id="check-result">Check for receipt</button>
       </div>
     </section>
     <section class="panel result" id="result-panel" aria-labelledby="result-title" hidden>
       <div class="panel-title"><h2 id="result-title">Verified result</h2><span class="badge good">HTTP 200</span></div>
       <dl class="rows">
         <div><dt>Settlement</dt><dd id="receipt">—</dd></div>
+        <div id="payer-row" hidden><dt>Payer</dt><dd id="receipt-payer">—</dd></div>
         <div><dt>Report SHA-256</dt><dd id="digest">—</dd></div>
       </dl>
       <pre><code id="blob"></code></pre>

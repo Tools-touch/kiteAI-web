@@ -79,13 +79,15 @@ function passport(service) {
       </section>
       <section class="panel">
         <h2>Connect an agent</h2>
-        <ol class="prose">
-          <li>Set up an agent in Passport and fund its wallet on a supported network.</li>
-          <li>Approve a spending session for the merchant and payment terms.</li>
-          <li>Run the command shown alongside the quote on the service page.</li>
-        </ol>
+        ${mode === 'passport' ? `
+          <ol class="prose">
+            <li>Set up a Passport agent and fund its wallet with Base USDC.</li>
+            <li>Approve a session for the merchant and payment terms.</li>
+            <li>Run the official client command shown alongside your service quote.</li>
+          </ol>` : `
+          <p class="prose">Passport uses the Base USDC merchant profile. Configure Passport mode to get an agent payment command and approve the session in Passport.</p>`}
         <div class="toolbar">
-          <a class="secondary" href="/services/status-report">Open service</a>
+          ${mode === 'passport' ? '<a class="secondary" href="/services/status-report">Open service</a>' : ''}
           <a class="secondary" href="https://docs.gokite.ai/passport/payments">Official payment guide</a>
         </div>
       </section>
@@ -96,7 +98,7 @@ function passport(service) {
   value('capability', {
     local: 'This preview uses demo authorizations. Switch the server to Passport mode for an official payer.',
     passport: 'A facilitator capability check is read-only. Session and settlement are verified during a paid request.',
-    'kite-testnet': 'This merchant profile targets Kite testnet. Check compatibility with your Passport environment before using it.'
+    'kite-testnet': 'This check covers the Kite Testnet x402 facilitator. Passport uses a separate Base USDC profile.'
   }[mode]);
   const button = document.getElementById('check');
   button.disabled = mode === 'local';

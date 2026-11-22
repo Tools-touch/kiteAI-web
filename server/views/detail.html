@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08121f">
+  <title>Service status report · Kite Service Console</title>
+  <link rel="stylesheet" href="/console.css">
+  <script type="module" src="/console.js"></script>
+</head>
+<body>
+  <header id="shell" class="topbar"></header>
+  <main>
+    <section class="hero" aria-labelledby="title">
+      <div>
+        <p class="eyebrow"><a href="/services">Service catalog</a></p>
+        <h1 id="title">Service status report</h1>
+        <p class="subtitle">Request a service report through x402.</p>
+      </div>
+      <div class="orbit" aria-hidden="true"><i></i><i></i><i></i><b></b><b></b><b></b></div>
+    </section>
+    <div class="workspace">
+      <section class="panel service" aria-labelledby="service">
+        <div class="panel-title">
+          <h2 id="service">Request a report</h2>
+          <span id="availability" class="badge">Loading</span>
+        </div>
+        <div class="endpoint"><span>GET</span><code>/api/report</code></div>
+        <dl class="rows">
+          <div><dt>Price</dt><dd id="price">—</dd></div>
+          <div><dt>Payment network</dt><dd id="payment-network">—</dd></div>
+          <div><dt>Config version</dt><dd id="service-version">—</dd></div>
+          <div><dt>Query parameters</dt><dd>None</dd></div>
+        </dl>
+        <button type="button" id="action" class="primary" disabled>Request payment terms</button>
+        <p class="conditions" id="conditions">Reading service registration from the chain.</p>
+      </section>
+      <section class="panel progress" aria-labelledby="flow">
+        <h2 id="flow">Request &amp; payment</h2>
+        <ol class="steps" id="steps">
+          <li aria-current="step"><strong>Request</strong><small id="step-request">Fetch the x402 endpoint</small></li>
+          <li><strong>Payment terms</strong><small id="step-terms"></small></li>
+          <li><strong>Payment verification</strong><small id="step-payment"></small></li>
+          <li><strong>Verified result</strong><small id="step-result"></small></li>
+        </ol>
+        <p id="notice" role="status" aria-live="polite" hidden></p>
+      </section>
+    </div>
+    <section class="panel detail-registry">
+      <div><strong>Service registry</strong><span class="conditions" id="registry-note"></span></div>
+      <a class="secondary" href="/registry">View chain configuration</a>
+    </section>
+    <section class="panel result" id="terms-panel" aria-labelledby="terms-title" hidden>
+      <div class="panel-title"><h2 id="terms-title">Payment terms</h2><span class="badge cyan">HTTP 402</span></div>
+      <dl class="rows">
+        <div><dt>Scheme</dt><dd id="terms-scheme">—</dd></div>
+        <div><dt>Asset</dt><dd id="terms-asset">—</dd></div>
+        <div><dt>Recipient</dt><dd id="terms-recipient">—</dd></div>
+        <div><dt>Authorization window</dt><dd id="terms-timeout">—</dd></div>
+      </dl>
+      <div id="cli-panel" hidden>
+        <p id="cli-guide"></p>
+        <pre><code id="cli-command"></code></pre>
+        <div class="toolbar">
+          <button type="button" class="secondary" id="copy-command">Copy command</button>
+          <button type="button" class="secondary" id="check-result">Check for receipt</button>
+        </div>
+      </div>
+    </section>
+    <section class="panel result" id="result-panel" aria-labelledby="result-title" hidden>
+      <div class="panel-title"><h2 id="result-title">Verified result</h2><span class="badge good">HTTP 200</span></div>
+      <dl class="rows">
+        <div><dt>Settlement</dt><dd id="receipt">—</dd></div>
+        <div><dt>Report SHA-256</dt><dd id="digest">—</dd></div>
+      </dl>
+      <pre><code id="blob"></code></pre>
+      <a class="text-link" href="/requests">Open request history</a>
+    </section>
+  </main>
+</body>
+</html>

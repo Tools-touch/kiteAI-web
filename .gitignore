@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.kpass/
+.kite-passport/
+.DS_Store
+coverage/
+out/
+cache/
+*.log
